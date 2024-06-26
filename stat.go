@@ -14,6 +14,7 @@ type stat struct {
 	miss    uint64
 	dbFails uint64
 	log     logger
+	shared  uint64
 }
 
 func NewStat(name string) *stat {
@@ -47,6 +48,10 @@ func (s *stat) incrementDbFails() {
 	atomic.AddUint64(&s.dbFails, 1)
 }
 
+func (s *stat) incrementShared() {
+	atomic.AddUint64(&s.shared, 1)
+}
+
 func (s *stat) statLoop(ticker *time.Ticker) {
 	for range ticker.C {
 		total := atomic.SwapUint64(&s.total, 0)
@@ -58,7 +63,8 @@ func (s *stat) statLoop(ticker *time.Ticker) {
 		percent := 100 * float32(hit) / float32(total)
 		miss := atomic.SwapUint64(&s.miss, 0)
 		dbf := atomic.SwapUint64(&s.dbFails, 0)
-		s.log.Infof("dbcache(%s) - qpm: %d, hit_ratio: %.1f%%, hit: %d, miss: %d, db_fails: %d",
-			s.name, total, percent, hit, miss, dbf)
+		shared := atomic.SwapUint64(&s.shared, 0)
+		s.log.Infof("dbcache(%s) - qpm: %d, hit_ratio: %.1f%%, hit: %d, miss: %d, db_fails: %d, shared: %d",
+			s.name, total, percent, hit, miss, dbf, shared)
 	}
 }
