@@ -8,7 +8,6 @@ import (
 const statInterval = time.Minute
 
 type stat struct {
-	name    string
 	total   uint64
 	hit     uint64
 	miss    uint64
@@ -17,9 +16,9 @@ type stat struct {
 	shared  uint64
 }
 
-func NewStat(name string) *stat {
+func NewStat(log logger) *stat {
 	ret := &stat{
-		name: name,
+		log: log,
 	}
 
 	go func() {
@@ -64,7 +63,7 @@ func (s *stat) statLoop(ticker *time.Ticker) {
 		miss := atomic.SwapUint64(&s.miss, 0)
 		dbf := atomic.SwapUint64(&s.dbFails, 0)
 		shared := atomic.SwapUint64(&s.shared, 0)
-		s.log.Infof("dbcache(%s) - qpm: %d, hit_ratio: %.1f%%, hit: %d, miss: %d, db_fails: %d, shared: %d",
-			s.name, total, percent, hit, miss, dbf, shared)
+		s.log.Infof("dbcache - qpm: %d, hit_ratio: %.1f%%, hit: %d, miss: %d, db_fails: %d, shared: %d",
+			total, percent, hit, miss, dbf, shared)
 	}
 }

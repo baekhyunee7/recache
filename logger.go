@@ -14,8 +14,8 @@ type logger interface {
 
 type defaultLogger struct{}
 
-func (l *defaultLogger) WithContext() logger {
-	return nil
+func (l *defaultLogger) WithContext(ctx context.Context) logger {
+	return l
 }
 
 func (l *defaultLogger) Infof(format string, args ...any) {
