@@ -25,20 +25,21 @@ type cacheConfig struct {
 	expire       time.Duration
 	log          logger
 	metricConfig *metricConfig
+	statInterval time.Duration
 }
 
 type metricConfig struct {
 	port int
 }
 
-type cache struct {
+type Cache struct {
 	cli  redis.Cmdable
 	stat *stat
 	cfg  *cacheConfig
 	sf   *singleflight.Group
 }
 
-func (c *cache) Get(ctx context.Context, key string, v any) error {
+func (c *Cache) Get(ctx context.Context, key string, v any) error {
 	c.stat.incrementTotal()
 	var result string
 	err := hystrix.DoC(ctx, fmt.Sprintf("Get: %s", key), func(ctx context.Context) error {
@@ -69,7 +70,7 @@ func (c *cache) Get(ctx context.Context, key string, v any) error {
 	return nil
 }
 
-func (c *cache) Del(ctx context.Context, keys ...string) error {
+func (c *Cache) Del(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -83,7 +84,7 @@ func (c *cache) Del(ctx context.Context, keys ...string) error {
 	return nil
 }
 
-func (c *cache) Set(ctx context.Context, key string, val any) error {
+func (c *Cache) Set(ctx context.Context, key string, val any) error {
 	return c.SetWithExpire(ctx, key, val, randExpire(c.cfg.expire))
 }
 
@@ -93,7 +94,7 @@ func randExpire(d time.Duration) time.Duration {
 	return time.Second * time.Duration(sec)
 }
 
-func (c *cache) SetWithExpire(ctx context.Context, key string, val any, expire time.Duration) error {
+func (c *Cache) SetWithExpire(ctx context.Context, key string, val any, expire time.Duration) error {
 	bs, err := json.Marshal(val)
 	if err != nil {
 		return err
@@ -103,7 +104,7 @@ func (c *cache) SetWithExpire(ctx context.Context, key string, val any, expire t
 	}, nil)
 }
 
-func (c *cache) Query(ctx context.Context, key string, val any, query func(v any) (bool, error)) error {
+func (c *Cache) Query(ctx context.Context, key string, val any, query func(v any) (bool, error)) error {
 	val, err, shared := c.sf.Do(key, func() (any, error) {
 		err := c.Get(ctx, key, val)
 		if err != nil {
@@ -137,13 +138,13 @@ func (c *cache) Query(ctx context.Context, key string, val any, query func(v any
 	return err
 }
 
-func (c *cache) setPlaceHolder(ctx context.Context, key string) error {
+func (c *Cache) setPlaceHolder(ctx context.Context, key string) error {
 	return hystrix.DoC(ctx, fmt.Sprintf("Set-Ph: %s", key), func(ctx context.Context) error {
 		return c.cli.Set(ctx, key, notfoundPlaceHolder, randExpire(c.cfg.expire)).Err()
 	}, nil)
 }
 
-func (c *cache) Exec(ctx context.Context, dbFunc func() error, keys ...string) error {
+func (c *Cache) Exec(ctx context.Context, dbFunc func() error, keys ...string) error {
 	err := dbFunc()
 	if err != nil {
 		return err
@@ -151,10 +152,11 @@ func (c *cache) Exec(ctx context.Context, dbFunc func() error, keys ...string) e
 	return c.Del(ctx, keys...)
 }
 
-func NewCache(cli redis.Cmdable, opts ...option) *cache {
+func NewCache(cli redis.Cmdable, opts ...option) *Cache {
 	cfg := &cacheConfig{
-		expire: time.Minute,
-		log:    &defaultLogger{},
+		expire:       time.Minute,
+		log:          &defaultLogger{},
+		statInterval: time.Minute,
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -164,9 +166,9 @@ func NewCache(cli redis.Cmdable, opts ...option) *cache {
 		hystrixStreamHandler.Start()
 		go http.ListenAndServe(fmt.Sprintf("0.0.0.0: %d", cfg.metricConfig.port), hystrixStreamHandler)
 	}
-	return &cache{
+	return &Cache{
 		cli:  cli,
-		stat: NewStat(cfg.log),
+		stat: NewStat(cfg.log, cfg.statInterval),
 		cfg:  cfg,
 		sf:   &singleflight.Group{},
 	}
@@ -197,5 +199,11 @@ func WithMetricsPort(port int) option {
 		cc.metricConfig = &metricConfig{
 			port: port,
 		}
+	}
+}
+
+func WithStatInterval(d time.Duration) option {
+	return func(cc *cacheConfig) {
+		cc.statInterval = d
 	}
 }

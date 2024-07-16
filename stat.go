@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-const statInterval = time.Minute
-
 type stat struct {
 	total   uint64
 	hit     uint64
@@ -16,13 +14,13 @@ type stat struct {
 	shared  uint64
 }
 
-func NewStat(log logger) *stat {
+func NewStat(log logger, i time.Duration) *stat {
 	ret := &stat{
 		log: log,
 	}
 
 	go func() {
-		ticker := time.NewTicker(statInterval)
+		ticker := time.NewTicker(i)
 		defer ticker.Stop()
 
 		ret.statLoop(ticker)
