@@ -119,6 +119,10 @@ func (c *Cache) Query(ctx context.Context, key string, val any, query func(v any
 					c.cfg.log.Warnf("set placeholder fail, key: %s, err: %v", key, err)
 					return nil, ErrNotFound
 				}
+				err = c.Set(ctx, key, val)
+				if err != nil {
+					c.cfg.log.Warnf("cache after query fail, key: %s, err: %v", key, err)
+				}
 				return val, nil
 			} else if err == errPlaceHolder {
 				return nil, ErrNotFound
